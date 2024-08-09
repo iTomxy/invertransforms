@@ -16,7 +16,8 @@ A library which turns torchvision transformations __invertible__ and __replayabl
 Installation
 ------------
 ```bash
-pip install invertransforms
+# pip install invertransforms
+pip install git+https://github.com/gregunz/invertransforms
 ```
 
 Usage
@@ -56,7 +57,7 @@ img_inv = inv_transform(img)
 ```
 __Notes:__
 
-If a transformation is random, it is necessary to apply it once before calling `invert` or `inverse()`. Otherwise it will raise `InvertibleError`. 
+If a transformation is random, it is necessary to apply it once before calling `invert` or `inverse()`. Otherwise it will raise `InvertibleError`.
 On the otherhand, `replay` can be called before, it will simply set the randomness on its first call.
 
 
@@ -89,7 +90,7 @@ Features
 
 - All classes extend its torchvision transformation equivalent class.
  This means, you can just replace your previous torchvision import statements and it will not break your code.
- 
+
 - Extensive unit testing (100% coverage, be safe, hopefully)
 
 Requirements
@@ -114,4 +115,3 @@ Contribute
 You found a bug, think a feature is missing or just want to help ?
 
 Please feel free to open an issue, pull request or contact me [mail@gregunz.io]
-
