@@ -52,7 +52,8 @@ class Affine(Invertible):
         return F.affine(img, *self.params, interpolation=self.interpolation, fill=fill, center=self.center)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(params={self.params}, interpolation={self.interpolation})'
+        return '{}(angle={}, translate={}, scale={}, shear={}, interpolation={}, fill={}, center={})'.format(
+            self.__class__.__name__, *self.params, self.interpolation, self.fill, self.center)
 
 
 class RandomAffine(transforms.RandomAffine, Invertible):
@@ -131,31 +132,29 @@ class Rotation(Invertible):
     Rotate the image given an angle (in degrees).
 
     Args:
-        angle (float or int): degrees of the angle
-        resample ({PIL.Image.NEAREST, PIL.Image.BILINEAR, PIL.Image.BICUBIC}, optional):
-            An optional resampling filter. See `filters`_ for more information.
-            If omitted, or if the image has mode "1" or "P", it is set to PIL.Image.NEAREST.
-        expand (bool, optional): Optional expansion flag.
-            If true, expands the output to make it large enough to hold the entire rotated image.
-            If false or omitted, make the output image the same size as the input image.
-            Note that the expand flag assumes rotation around the center and no translation.
-        center (2-tuple, optional): Optional center of rotation.
-            Origin is the upper left corner.
-            Default is the center of the image.
+        See torchvision.transforms.functional.rotate
     """
 
-    def __init__(self, angle, resample=False, expand=False, center=None):
+    def __init__(self, angle, interpolation=InterpolationMode.NEAREST, expand=False, center=None, fill=None):
         self.angle = angle
-        self.resample = resample
+        self.interpolation = interpolation
         self.expand = expand
         self.center = center
+        self.fill = fill
         self._img_h = self._img_w = None
 
     def __call__(self, img):
         first_call = self._img_h is None or self._img_w is None
+        channels, height, width = F.get_dimensions(img)
         if first_call:
-            self._img_w, self._img_h = img.size
-        img = F.rotate(img, self.angle, self.resample, self.expand, self.center)
+            self._img_w, self._img_h = width, height
+        fill = self.fill
+        if isinstance(img, torch.Tensor):
+            if isinstance(fill, (int, float)):
+                fill = [float(fill)] * channels
+            else:
+                fill = [float(f) for f in fill]
+        img = F.rotate(img, self.angle, self.interpolation, self.expand, self.center, fill)
         if not first_call and self.expand:
             img = F.center_crop(img=img, output_size=(self._img_h, self._img_w))
         return img
@@ -167,37 +166,54 @@ class Rotation(Invertible):
                 ' (size of image before expanded rotation unknown).')  # note: the size could be computed
         rot = Rotation(
             angle=-self.angle,
-            resample=self.resample,
+            interpolation=self.interpolation,
             expand=self.expand,
             center=self.center,
+            fill=self.fill,
         )
         rot._img_h, rot._img_w = self._img_h, self._img_w
         return rot
 
     def __repr__(self):
         format_string = self.__class__.__name__ + '(angle={0}'.format(self.angle)
-        format_string += ', resample={0}'.format(self.resample)
+        format_string += ', interpolation={0}'.format(self.interpolation)
         format_string += ', expand={0}'.format(self.expand)
         if self.center is not None:
             format_string += ', center={0}'.format(self.center)
+        if self.fill is not None:
+            format_string += ', fill={0}'.format(self.fill)
         format_string += ')'
         return format_string
 
 
 class RandomRotation(transforms.RandomRotation, Invertible):
-    _angle = _img_h = _img_w = None
+    def __init__(self, *args, **kwargs):
+        transforms.RandomRotation.__init__(self, *args, **kwargs)
+        self._angle = self._img_h = self._img_w = None
 
     def __call__(self, img):
+        return self.forward(img)
+
+    def forward(self, img):
         """
         Args:
-            img (PIL Image): Image to be rotated.
+            img (PIL Image or Tensor): Image to be rotated.
 
         Returns:
-            PIL Image: Rotated image.
+            PIL Image or Tensor: Rotated image.
         """
-        self._angle = self.get_params(self.degrees)
-        self._img_w, self._img_h = img.size
-        return F.rotate(img, self._angle, self.resample, self.expand, self.center)
+        fill = self.fill
+        channels, height, width = F.get_dimensions(img)
+        if isinstance(img, torch.Tensor):
+            if isinstance(fill, (int, float)):
+                fill = [float(fill)] * channels
+            else:
+                fill = [float(f) for f in fill]
+        angle = self.get_params(self.degrees)
+
+        self._angle, self._img_w, self._img_h = angle, width, height
+
+        return F.rotate(img, angle, self.interpolation, self.expand, self.center, fill)
 
     def inverse(self):
         if not self._can_invert():
@@ -205,9 +221,10 @@ class RandomRotation(transforms.RandomRotation, Invertible):
 
         rot = Rotation(
             angle=-self._angle,
-            resample=self.resample,
+            interpolation=self.interpolation,
             expand=self.expand,
             center=self.center,
+            fill=self.fill,
         )
         rot._img_h, rot._img_w = self._img_h, self._img_w
         return rot
