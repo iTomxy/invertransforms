@@ -128,3 +128,44 @@ def flip_coin(p):
 
     assert 0 <= p <= 1, 'A probability should be between 0 and 1'
     return random.random() < p
+
+
+class PseudoInversion(Invertible):
+    """Stupid carrier of original and transformed data.
+    It does not really perform invere transformations,
+    but instead return the memorised original data.
+    It serves as a workaround for those non-invertible.
+    """
+    def __init__(self, x, x_aug):
+        self.x = x
+        self.x_aug = x_aug
+    def inverse(self):
+        return PseudoInversion(self.x_aug, self.x)
+    def __call__(self, *args, **kwargs):
+        return self.x
+    def __repr__(self):
+        return "PseudoInversion()"
+
+
+class TogglePseudoInversion(Invertible):
+    """Also a stupid carrier of original and transformed data,
+    but designed for (non-invertible) transforms randomly applied subject to a probability.
+    """
+    def __init__(self, x, x_aug, p, random=False):
+        self.x = x
+        self.x_aug = x_aug
+        assert 0 <= p <= 1
+        self.p = p
+        self.random = random
+    def inverse(self):
+        # NOTE NO swapping `x` and `x_aug` here
+        return TogglePseudoInversion(self.x, self.x_aug, self.p, not self.random)
+    def __call__(self, *args, **kwargs):
+        if self.random:
+            return self.x_aug if torch.rand(1) < self.p else self.x
+        else:
+            return self.x
+    def __repr__(self):
+        if self.random:
+            return f"TogglePseudoInversion(p={self.p})"
+        return "TogglePseudoInversion()"

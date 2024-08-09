@@ -82,9 +82,6 @@ class RandomAffine(transforms.RandomAffine, Invertible):
                 "{degrees, translate, scale, shear} at a time, and then compose them with `Compose`."
             )
 
-    def __call__(self, img):
-        return self.forward(img)
-
     def forward(self, img):
         """
             img (PIL Image or Tensor): Image to be transformed.
@@ -190,9 +187,6 @@ class RandomRotation(transforms.RandomRotation, Invertible):
     def __init__(self, *args, **kwargs):
         transforms.RandomRotation.__init__(self, *args, **kwargs)
         self._angle = self._img_h = self._img_w = None
-
-    def __call__(self, img):
-        return self.forward(img)
 
     def forward(self, img):
         """

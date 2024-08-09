@@ -9,7 +9,7 @@ from torchvision import transforms
 from torchvision.transforms import functional as F
 
 import invertransforms as T
-from invertransforms.lib import InvertibleError, Invertible, flip_coin
+from invertransforms.lib import InvertibleError, Invertible, flip_coin, PseudoInversion, TogglePseudoInversion
 
 
 class DeterministicColorJitter(Invertible):
@@ -58,10 +58,7 @@ class ColorJitter(transforms.ColorJitter, Invertible):
 
     def __init__(self, *args, **kwargs):
         transforms.ColorJitter.__init__(self, *args, **kwargs)
-        self._params = self._fn_idx = None
-
-    def __call__(self, img):
-        return self.forward(img)
+        self._params = self._fn_idx = self._x = self._x_aug = None
 
     def forward(self, img):
         """
@@ -71,6 +68,7 @@ class ColorJitter(transforms.ColorJitter, Invertible):
         Returns:
             PIL Image or Tensor: Color jittered image.
         """
+        self._x = img
         fn_idx, brightness_factor, contrast_factor, saturation_factor, hue_factor = self.get_params(
             self.brightness, self.contrast, self.saturation, self.hue
         )
@@ -87,9 +85,16 @@ class ColorJitter(transforms.ColorJitter, Invertible):
             elif fn_id == 3 and hue_factor is not None:
                 img = F.adjust_hue(img, hue_factor)
 
+        self._x_aug = img
         return img
 
-    def inverse(self):
+    def inverse(self, stupid=False):
+        """stupid: bool, if True, use `PseudoInversion`"""
+        if stupid:
+            if self._x is None or self._x_aug is None:
+                raise InvertibleError('Cannot invert a random transformation before it is applied.')
+            return PseudoInversion(self._x, self._x_aug)
+
         if not self._can_invert():
             raise InvertibleError('Cannot invert a random transformation before it is applied.')
 
@@ -110,47 +115,34 @@ class ColorJitter(transforms.ColorJitter, Invertible):
         return True
 
 
-class Grayscale(transforms.Grayscale, Invertible):
-    def __call__(self, img):
-        """
-        Args:
-            img (PIL Image): Image to be converted to grayscale.
-
-        Returns:
-            PIL Image: Randomly grayscaled image.
-        """
-        return F.to_grayscale(img, num_output_channels=self.num_output_channels)
-
-    def inverse(self):
-        return T.Lambda(
-            lambd=lambda x: x,
-            tf_inv=Grayscale(self.num_output_channels),
-            repr_str='GrayscaleInverse()'
-        )
-
-
 class RandomGrayscale(transforms.RandomGrayscale, Invertible):
-    _transform = None
+    def __init__(self, *args, **kwargs):
+        transforms.RandomGrayscale.__init__(self, *args, **kwargs)
+        self._x = self._x_aug = None
 
-    def __call__(self, img):
+    def forward(self, img):
         """
         Args:
-            img (PIL Image): Image to be converted to grayscale.
+            img (PIL Image or Tensor): Image to be converted to grayscale.
 
         Returns:
-            PIL Image: Randomly grayscaled image.
+            PIL Image or Tensor: Randomly grayscaled image.
         """
-        self._transform = T.Identity()
-        if flip_coin(self.p):
-            num_output_channels = 1 if img.mode == 'L' else 3
-            self._transform = Grayscale(num_output_channels=num_output_channels)
-        return self._transform(img)
+        self._x = img
+        num_output_channels, _, _ = F.get_dimensions(img)
+        self._x_aug = F.rgb_to_grayscale(img, num_output_channels=num_output_channels)
+        if torch.rand(1) < self.p:
+            return self._x_aug
+        return img
 
-    def inverse(self):
+    def inverse(self, stupid=False):
+        """stupid: bool, if True, use `TogglePseudoInversion`"""
+        if not stupid:
+            raise InvertibleError('Non-invertible. Unless set `stupid=True` to enable fake inversion.')
         if not self._can_invert():
             raise InvertibleError('Cannot invert a random transformation before it is applied.')
 
-        return self._transform.inverse()
+        return TogglePseudoInversion(self._x, self._x_aug, self.p)
 
     def _can_invert(self):
-        return self._transform is not None
+        return self._x is not None and self._x_aug is not None

@@ -44,7 +44,7 @@ Such that more functions could be added in the future.
 from torchvision.transforms import functional
 
 from .affine import Affine, RandomAffine, RandomRotation, Rotation
-from .color import ColorJitter, Grayscale, RandomGrayscale
+from .color import ColorJitter, RandomGrayscale
 from .crop_pad import Crop, RandomCrop, Pad, FiveCrop, TenCrop, CenterCrop
 from .perpective import Perspective, VerticalFlip, HorizontalFlip, RandomHorizontalFlip, RandomVerticalFlip, \
     RandomPerspective
